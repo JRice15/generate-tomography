@@ -29,7 +29,21 @@ random_seed = 12345
 
 # Note that nspheres_per_unit is set to a low value to reduce the computation time here.
 # The default value is 100000.
-foam_ct_phantom.FoamPhantom.generate('test_phantom.h5',random_seed,nspheres_per_unit=1)
+foam_ct_phantom.FoamPhantom.generate('test_phantom.h5',random_seed,nspheres_per_unit=4)
+
+### 02 plot
+
+phantom = foam_ct_phantom.FoamPhantom('test_phantom.h5')
+
+geom = foam_ct_phantom.VolumeGeometry(256,256,1,3/256)
+
+phantom.generate_volume('test_midslice.h5', geom)
+
+vol = foam_ct_phantom.load_volume('test_midslice.h5')
+
+print(len(vol), "volumes, shape", vol.shape)
+pl.imshow(vol[0])
+pl.savefig("phantom.png")
 
 ### 03 create parallel projection
 
@@ -42,11 +56,27 @@ phantom.generate_projections('test_projs_par.h5',geom)
 
 projs = foam_ct_phantom.load_projections('test_projs_par.h5')
 
+print(len(projs), "projections, shape", projs.shape)
 pl.imshow(projs[0])
-pl.savefig("1.png")
+pl.savefig("projected.png")
 
 ### 08 add poisson noise
 print("Adding Noise...")
+fac = foam_ct_phantom.estimate_absorption_factor('test_projs_par.h5',0.5)
+
+foam_ct_phantom.apply_poisson_noise(input_file='test_projs_par.h5',
+                                    output_file='test_projs_noisy.h5',
+                                    seed=1234,
+                                    flux=100,
+                                    absorption_factor=fac)
+
+projs = foam_ct_phantom.load_projections('test_projs_noisy.h5')
+
+pl.imshow(projs[0])
+pl.savefig("noisy.png")
+
+### 09 astra reconstruction
+print("Reconstructing...")
 
 projs = foam_ct_phantom.load_projections('test_projs_par.h5')
 
@@ -63,5 +93,5 @@ w = astra.OpTomo(pid)
 mid_slice = w.reconstruct('FBP_CUDA', projs[:,projs.shape[1]//2])
 
 pl.imshow(mid_slice)
-pl.savefig("2.png")
+pl.savefig("reconstructed.png")
 
