@@ -59,6 +59,8 @@ projs = foam_ct_phantom.load_projections('test_projs_par.h5')
 print(len(projs), "projections, shape", projs.shape)
 pl.imshow(projs[0])
 pl.savefig("projected.png")
+pl.imshow(projs[3])
+pl.savefig("projected3.png")
 
 ### 08 add poisson noise
 print("Adding Noise...")
@@ -74,6 +76,8 @@ projs = foam_ct_phantom.load_projections('test_projs_noisy.h5')
 
 pl.imshow(projs[0])
 pl.savefig("noisy.png")
+pl.imshow(projs[3])
+pl.savefig("noisy3.png")
 
 ### 09 astra reconstruction
 print("Reconstructing...")
@@ -94,4 +98,19 @@ mid_slice = w.reconstruct('FBP_CUDA', projs[:,projs.shape[1]//2])
 
 pl.imshow(mid_slice)
 pl.savefig("reconstructed.png")
+
+
+projs = foam_ct_phantom.load_projections('test_projs_noisy.h5')
+
+pg = proj_geom.to_astra(single_slice=True)
+vg = vol_geom.to_astra(single_slice=True)
+
+pid = astra.create_projector('cuda', pg, vg)
+w = astra.OpTomo(pid)
+
+mid_slice = w.reconstruct('FBP_CUDA', projs[:,projs.shape[1]//2])
+
+pl.imshow(mid_slice)
+pl.savefig("reconstructed_noisy.png")
+
 
