@@ -20,41 +20,43 @@ import numpy as np
 import h5py
 import astra
 import matplotlib.pylab as pl
+import argparse
+import os
 pl.gray()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--spheres",required=True,type=int)
+parser.add_argument("--seed")
+args = parser.parse_args()
+
+os.makedirs("data", exist_ok=True)
 
 ### 01 generate phantom
 
-print("Generating...")
-random_seed = 12345
+if args.seed is None:
+    print("Generating...")
+    random_seed = np.random.randint(0, 100000)
+    print("seed:", random_seed)
+else:
+    random_seed = int(args.seed)
+
+prefix = "data/" + str(random_seed) + "_"
+suffix = "_" + str(args.spheres) + "spheres.h5"
 
 # Note that nspheres_per_unit is set to a low value to reduce the computation time here.
 # The default value is 100000.
-foam_ct_phantom.FoamPhantom.generate('test_phantom.h5',random_seed,nspheres_per_unit=4)
-
-### 02 plot
-
-phantom = foam_ct_phantom.FoamPhantom('test_phantom.h5')
-
-geom = foam_ct_phantom.VolumeGeometry(256,256,1,3/256)
-
-phantom.generate_volume('test_midslice.h5', geom)
-
-vol = foam_ct_phantom.load_volume('test_midslice.h5')
-
-print(len(vol), "volumes, shape", vol.shape)
-pl.imshow(vol[0])
-pl.savefig("phantom.png")
+foam_ct_phantom.FoamPhantom.generate(prefix+'phantom'+suffix,random_seed,nspheres_per_unit=args.spheres)
 
 ### 03 create parallel projection
 
 print("Projecting...")
-phantom = foam_ct_phantom.FoamPhantom('test_phantom.h5')
+phantom = foam_ct_phantom.FoamPhantom(prefix+'phantom'+suffix)
 
 geom = foam_ct_phantom.ParallelGeometry(256,256,np.linspace(0,np.pi,128,False),3/256)
 
-phantom.generate_projections('test_projs_par.h5',geom)
+phantom.generate_projections(prefix+'proj_par'+suffix,geom)
 
-projs = foam_ct_phantom.load_projections('test_projs_par.h5')
+projs = foam_ct_phantom.load_projections(prefix+'proj_par'+suffix)
 
 print(len(projs), "projections, shape", projs.shape)
 pl.imshow(projs[0])
@@ -64,53 +66,19 @@ pl.savefig("projected3.png")
 
 ### 08 add poisson noise
 print("Adding Noise...")
-fac = foam_ct_phantom.estimate_absorption_factor('test_projs_par.h5',0.5)
+fac = foam_ct_phantom.estimate_absorption_factor(prefix+'proj_par'+suffix,0.5)
 
-foam_ct_phantom.apply_poisson_noise(input_file='test_projs_par.h5',
-                                    output_file='test_projs_noisy.h5',
+foam_ct_phantom.apply_poisson_noise(input_file=prefix+'proj_par'+suffix,
+                                    output_file=prefix+'proj_noisy'+suffix,
                                     seed=1234,
                                     flux=100,
                                     absorption_factor=fac)
 
-projs = foam_ct_phantom.load_projections('test_projs_noisy.h5')
+projs = foam_ct_phantom.load_projections(prefix+'proj_noisy'+suffix)
 
 pl.imshow(projs[0])
 pl.savefig("noisy.png")
 pl.imshow(projs[3])
 pl.savefig("noisy3.png")
-
-### 09 astra reconstruction
-print("Reconstructing...")
-
-projs = foam_ct_phantom.load_projections('test_projs_par.h5')
-
-vol_geom = foam_ct_phantom.VolumeGeometry(256, 256, 256, 3/256)
-
-proj_geom = foam_ct_phantom.ParallelGeometry.from_file('test_projs_par.h5')
-
-pg = proj_geom.to_astra(single_slice=True)
-vg = vol_geom.to_astra(single_slice=True)
-
-pid = astra.create_projector('cuda', pg, vg)
-w = astra.OpTomo(pid)
-
-mid_slice = w.reconstruct('FBP_CUDA', projs[:,projs.shape[1]//2])
-
-pl.imshow(mid_slice)
-pl.savefig("reconstructed.png")
-
-
-projs = foam_ct_phantom.load_projections('test_projs_noisy.h5')
-
-pg = proj_geom.to_astra(single_slice=True)
-vg = vol_geom.to_astra(single_slice=True)
-
-pid = astra.create_projector('cuda', pg, vg)
-w = astra.OpTomo(pid)
-
-mid_slice = w.reconstruct('FBP_CUDA', projs[:,projs.shape[1]//2])
-
-pl.imshow(mid_slice)
-pl.savefig("reconstructed_noisy.png")
 
 
